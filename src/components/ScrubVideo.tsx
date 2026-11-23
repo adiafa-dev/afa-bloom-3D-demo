@@ -92,22 +92,35 @@ export function ScrubVideo() {
   }, []);
 
   return (
-    <video
-      ref={videoRef}
-      src={VIDEO_URL}
-      muted
-      playsInline
-      preload="auto"
-      onLoadedMetadata={handleReady}
-      onLoadedData={handleReady}
-      onSeeked={handleSeeked}
-      aria-hidden="true"
-      className="fixed inset-0 z-0 w-full h-full object-cover pointer-events-none brightness-[1.04] translate-x-[8%] sm:translate-x-[0%] md:translate-x-[18%] lg:translate-x-[22%]"
-      style={{
-        objectPosition: 'center center',
-        maskImage: 'linear-gradient(to right, transparent 0%, black 12%)',
-        WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 12%)',
-      }}
-    />
+    
+  <video
+    ref={videoRef}
+    src={VIDEO_URL}
+    muted
+    playsInline
+    preload="auto"
+    onLoadStart={() => console.log('[VIDEO] loadstart')}
+    onLoadedMetadata={() => {
+      console.log('[VIDEO] loadedmetadata');
+      handleLoadedMetadata();
+    }}
+    onLoadedData={() => console.log('[VIDEO] loadeddata')}
+    onCanPlay={() => console.log('[VIDEO] canplay')}
+    onCanPlayThrough={() => console.log('[VIDEO] canplaythrough')}
+    onSeeking={() => console.log('[VIDEO] seeking')}
+    onSeeked={() => {
+      console.log('[VIDEO] seeked');
+      handleSeeked();
+    }}
+    onError={(e) => console.log('[VIDEO] error', e.currentTarget.error)}
+    aria-hidden="true"
+    className="fixed inset-0 z-0 w-full h-full object-cover pointer-events-none brightness-[1.04] translate-x-[8%] sm:translate-x-[0%] md:translate-x-[18%] lg:translate-x-[22%]"
+    style={{
+      objectPosition: 'center center',
+      maskImage: 'linear-gradient(to right, transparent 0%, black 12%)',
+      WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 12%)',
+    }}
+  />
+
   );
 }
