@@ -11,6 +11,26 @@ export function ScrubVideo() {
   const targetTimeRef = useRef(0);
   const isSeekingRef = useRef(false);
   const isReadyRef = useRef(false);
+  const primedRef = useRef(false);
+
+  const primeFirstFrame = useCallback(() => {
+    const video = videoRef.current;
+    if (!video || primedRef.current) return;
+    primedRef.current = true;
+
+    // Pancing decoder agar frame awal siap di cold load tanpa memutar audio/video
+    const playPromise = video.play();
+    if (playPromise && typeof playPromise.then === 'function') {
+      playPromise
+        .then(() => {
+          video.pause();
+          video.currentTime = 0;
+        })
+        .catch(() => {
+          // Diabaikan jika browser memblokir play() sebelum interaksi user
+        });
+    }
+  }, []);
 
   const handleReady = useCallback(() => {
     const video = videoRef.current;
@@ -19,13 +39,15 @@ export function ScrubVideo() {
     if (
       Number.isFinite(video.duration) &&
       video.duration > 0 &&
-      video.readyState >= 1 &&
-      !isReadyRef.current
+      video.readyState >= 1
     ) {
-      isReadyRef.current = true;
-      targetTimeRef.current = video.currentTime || 0;
+      if (!isReadyRef.current) {
+        isReadyRef.current = true;
+        targetTimeRef.current = video.currentTime || 0;
+      }
+      primeFirstFrame();
     }
-  }, []);
+  }, [primeFirstFrame]);
 
   const handleSeeked = useCallback(() => {
     const video = videoRef.current;
@@ -48,6 +70,7 @@ export function ScrubVideo() {
   }, []);
 
   useEffect(() => {
+    console.log('[ScrubVideo] MOUNT');
     handleReady();
 
     const handleMouseMove = (event: MouseEvent) => {
@@ -100,6 +123,7 @@ export function ScrubVideo() {
     window.addEventListener('mouseleave', handleMouseLeave);
 
     return () => {
+      console.log('[ScrubVideo] UNMOUNT');
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseleave', handleMouseLeave);
     };
@@ -115,7 +139,6 @@ export function ScrubVideo() {
       onLoadedMetadata={handleReady}
       onLoadedData={handleReady}
       onCanPlay={handleReady}
-      onCanPlayThrough={handleReady}
       onSeeked={handleSeeked}
       aria-hidden="true"
       className="fixed inset-0 z-0 w-full h-full object-cover pointer-events-none brightness-[1.04] translate-x-[8%] sm:translate-x-[0%] md:translate-x-[18%] lg:translate-x-[22%]"
