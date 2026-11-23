@@ -5,73 +5,35 @@ const VIDEO_URL =
   '/assets/aistudio/kling_20261120_VIDEO_Tolong_bua_4205_0_f0492195.mp4';
 
 const SENSITIVITY = 0.8;
-const SEEK_THRESHOLD = 0.04;
 
 export function ScrubVideo() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const prevXRef = useRef<number | null>(null);
-
   const targetTimeRef = useRef(0);
-  const requestedTimeRef = useRef(0);
-
   const isSeekingRef = useRef(false);
   const isReadyRef = useRef(false);
 
-  const requestSeek = useCallback((time: number) => {
-    const video = videoRef.current;
-
-    if (
-      !video ||
-      !isReadyRef.current ||
-      video.readyState < 2 ||
-      !Number.isFinite(video.duration)
-    ) {
-      return;
-    }
-
-    const nextTime = Math.max(
-      0,
-      Math.min(time, video.duration - 0.05)
-    );
-
-    if (isSeekingRef.current) return;
-
-    if (Math.abs(video.currentTime - nextTime) < SEEK_THRESHOLD) {
-      return;
-    }
-
-    isSeekingRef.current = true;
-    requestedTimeRef.current = nextTime;
-
-    video.currentTime = nextTime;
-  }, []);
-
   const handleReady = useCallback(() => {
     const video = videoRef.current;
+    if (!video || !Number.isFinite(video.duration)) return;
 
-    if (!video || video.readyState < 2) return;
-
-    if (!isReadyRef.current) {
-      targetTimeRef.current = video.currentTime || 0;
-      requestedTimeRef.current = video.currentTime || 0;
-      isReadyRef.current = true;
-    }
+    isReadyRef.current = true;
+    targetTimeRef.current = video.currentTime || 0;
   }, []);
 
   const handleSeeked = useCallback(() => {
     const video = videoRef.current;
-    if (!video) return;
-
-    isSeekingRef.current = false;
-
-    const difference = Math.abs(
-      targetTimeRef.current - requestedTimeRef.current
-    );
-
-    if (difference > SEEK_THRESHOLD) {
-      requestSeek(targetTimeRef.current);
+    if (!video) {
+      isSeekingRef.current = false;
+      return;
     }
-  }, [requestSeek]);
+
+    if (Math.abs(video.currentTime - targetTimeRef.current) > 0.03) {
+      video.currentTime = targetTimeRef.current;
+    } else {
+      isSeekingRef.current = false;
+    }
+  }, []);
 
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
@@ -102,15 +64,15 @@ export function ScrubVideo() {
         SENSITIVITY *
         video.duration;
 
-      targetTimeRef.current = Math.max(
-        0,
-        Math.min(
-          targetTimeRef.current + timeOffset,
-          video.duration - 0.05
-        )
+      targetTimeRef.current = Math.min(
+        Math.max(targetTimeRef.current + timeOffset, 0),
+        video.duration - 0.01
       );
 
-      requestSeek(targetTimeRef.current);
+      if (!isSeekingRef.current && video.readyState >= 2) {
+        isSeekingRef.current = true;
+        video.currentTime = targetTimeRef.current;
+      }
     };
 
     const handleMouseLeave = () => {
@@ -127,7 +89,7 @@ export function ScrubVideo() {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseleave', handleMouseLeave);
     };
-  }, [requestSeek]);
+  }, []);
 
   return (
     <video
@@ -136,16 +98,15 @@ export function ScrubVideo() {
       muted
       playsInline
       preload="auto"
+      onLoadedMetadata={handleReady}
       onLoadedData={handleReady}
-      onCanPlay={handleReady}
       onSeeked={handleSeeked}
       aria-hidden="true"
       className="fixed inset-0 z-0 w-full h-full object-cover pointer-events-none brightness-[1.04] translate-x-[8%] sm:translate-x-[0%] md:translate-x-[18%] lg:translate-x-[22%]"
       style={{
         objectPosition: 'center center',
         maskImage: 'linear-gradient(to right, transparent 0%, black 12%)',
-        WebkitMaskImage:
-          'linear-gradient(to right, transparent 0%, black 12%)',
+        WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 12%)',
       }}
     />
   );
