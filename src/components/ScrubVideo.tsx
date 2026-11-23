@@ -11,23 +11,21 @@ export function ScrubVideo() {
   const targetTimeRef = useRef(0);
   const isSeekingRef = useRef(false);
   const isReadyRef = useRef(false);
-  const rafIdRef = useRef<number | null>(null);
 
-  const canScrubVideo = useCallback((video: HTMLVideoElement | null) => {
-    if (!video) return false;
-    const hasDuration = Number.isFinite(video.duration) && video.duration > 0;
-    return hasDuration && video.readyState >= 1;
-  }, []);
-
-  const syncReadyState = useCallback(() => {
+  const handleReady = useCallback(() => {
     const video = videoRef.current;
-    if (!canScrubVideo(video)) return;
+    if (!video) return;
 
-    if (!isReadyRef.current && video) {
+    if (
+      Number.isFinite(video.duration) &&
+      video.duration > 0 &&
+      video.readyState >= 1 &&
+      !isReadyRef.current
+    ) {
       isReadyRef.current = true;
       targetTimeRef.current = video.currentTime || 0;
     }
-  }, [canScrubVideo]);
+  }, []);
 
   const handleSeeked = useCallback(() => {
     const video = videoRef.current;
@@ -41,7 +39,7 @@ export function ScrubVideo() {
       Math.max(video.duration - 0.01, 0)
     );
 
-    if (Math.abs(video.currentTime - clamped) > 0.03) {
+    if (Math.abs(video.currentTime - clamped) > 0.04) {
       video.currentTime = clamped;
       return;
     }
@@ -50,35 +48,7 @@ export function ScrubVideo() {
   }, []);
 
   useEffect(() => {
-    const video = videoRef.current;
-    if (video && video.readyState === 0) {
-      video.load();
-    }
-    syncReadyState();
-
-    const stepScrub = () => {
-      const vid = videoRef.current;
-      if (canScrubVideo(vid) && vid && !isSeekingRef.current) {
-        if (!isReadyRef.current) {
-          isReadyRef.current = true;
-          targetTimeRef.current = vid.currentTime || 0;
-        }
-
-        const clampedTarget = Math.min(
-          Math.max(targetTimeRef.current, 0),
-          Math.max(vid.duration - 0.01, 0)
-        );
-
-        if (Math.abs(clampedTarget - vid.currentTime) > 0.01) {
-          isSeekingRef.current = true;
-          vid.currentTime = clampedTarget;
-        }
-      }
-
-      rafIdRef.current = window.requestAnimationFrame(stepScrub);
-    };
-
-    rafIdRef.current = window.requestAnimationFrame(stepScrub);
+    handleReady();
 
     const handleMouseMove = (event: MouseEvent) => {
       if (prevXRef.current === null) {
@@ -91,23 +61,35 @@ export function ScrubVideo() {
 
       if (delta === 0) return;
 
-      const vid = videoRef.current;
-      if (!canScrubVideo(vid) || !vid) return;
-
-      if (!isReadyRef.current) {
-        isReadyRef.current = true;
-        targetTimeRef.current = vid.currentTime || 0;
+      const video = videoRef.current;
+      if (!video || !Number.isFinite(video.duration) || video.duration <= 0) {
+        return;
       }
+
+      if (!isReadyRef.current && video.readyState >= 1) {
+        isReadyRef.current = true;
+        targetTimeRef.current = video.currentTime || 0;
+      }
+
+      if (!isReadyRef.current) return;
 
       const timeOffset =
         (delta / Math.max(window.innerWidth, 1)) *
         SENSITIVITY *
-        vid.duration;
+        video.duration;
 
-      targetTimeRef.current = Math.min(
+      const nextTarget = Math.min(
         Math.max(targetTimeRef.current + timeOffset, 0),
-        Math.max(vid.duration - 0.01, 0)
+        Math.max(video.duration - 0.01, 0)
       );
+
+      if (Math.abs(nextTarget - targetTimeRef.current) < 0.002) return;
+      targetTimeRef.current = nextTarget;
+
+      if (!isSeekingRef.current) {
+        isSeekingRef.current = true;
+        video.currentTime = targetTimeRef.current;
+      }
     };
 
     const handleMouseLeave = () => {
@@ -118,13 +100,10 @@ export function ScrubVideo() {
     window.addEventListener('mouseleave', handleMouseLeave);
 
     return () => {
-      if (rafIdRef.current !== null) {
-        window.cancelAnimationFrame(rafIdRef.current);
-      }
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseleave', handleMouseLeave);
     };
-  }, [canScrubVideo, syncReadyState]);
+  }, [handleReady]);
 
   return (
     <video
@@ -133,9 +112,10 @@ export function ScrubVideo() {
       muted
       playsInline
       preload="auto"
-      onLoadedMetadata={syncReadyState}
-      onLoadedData={syncReadyState}
-      onCanPlay={syncReadyState}
+      onLoadedMetadata={handleReady}
+      onLoadedData={handleReady}
+      onCanPlay={handleReady}
+      onCanPlayThrough={handleReady}
       onSeeked={handleSeeked}
       aria-hidden="true"
       className="fixed inset-0 z-0 w-full h-full object-cover pointer-events-none brightness-[1.04] translate-x-[8%] sm:translate-x-[0%] md:translate-x-[18%] lg:translate-x-[22%]"
