@@ -102,7 +102,7 @@ export function ScrubVideo() {
     onLoadStart={() => console.log('[VIDEO] loadstart')}
     onLoadedMetadata={() => {
       console.log('[VIDEO] loadedmetadata');
-      handleLoadedMetadata();
+      handleReady();
     }}
     onLoadedData={() => console.log('[VIDEO] loadeddata')}
     onCanPlay={() => console.log('[VIDEO] canplay')}
