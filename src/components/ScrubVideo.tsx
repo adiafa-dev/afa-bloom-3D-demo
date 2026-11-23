@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const VIDEO_URL =
-  '/assets/aistudio/kling_20261120_VIDEO_Tolong_bua_4205_0_f0492195.mp4';
+  '/assets/aistudio/afa-char.mp4';
 
 const SENSITIVITY = 0.8;
 const SEEK_THRESHOLD = 0.04;
@@ -170,6 +170,7 @@ export function ScrubVideo() {
     <video
       ref={videoRef}
       src={blobUrl ?? undefined}
+      poster="/assets/aistudio/poster.jpg"
       muted
       playsInline
       preload="auto"
