@@ -1,18 +1,23 @@
+
 import { useCallback, useEffect, useRef } from 'react';
 
 const VIDEO_URL =
   '/assets/aistudio/kling_20261120_VIDEO_Tolong_bua_4205_0_f0492195.mp4';
+
 const SENSITIVITY = 0.8;
 
 export function ScrubVideo() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const prevXRef = useRef<number | null>(null);
-  const targetTimeRef = useRef<number>(0);
-  const isSeekingRef = useRef<boolean>(false);
+  const targetTimeRef = useRef(0);
+  const isSeekingRef = useRef(false);
+  const isReadyRef = useRef(false);
 
-  const handleLoadedMetadata = useCallback(() => {
+  const handleReady = useCallback(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || !Number.isFinite(video.duration)) return;
+
+    isReadyRef.current = true;
     targetTimeRef.current = video.currentTime || 0;
   }, []);
 
@@ -23,7 +28,7 @@ export function ScrubVideo() {
       return;
     }
 
-    if (Math.abs(video.currentTime - targetTimeRef.current) > 0.01) {
+    if (Math.abs(video.currentTime - targetTimeRef.current) > 0.03) {
       video.currentTime = targetTimeRef.current;
     } else {
       isSeekingRef.current = false;
@@ -33,7 +38,13 @@ export function ScrubVideo() {
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
       const video = videoRef.current;
-      if (!video || !video.duration || Number.isNaN(video.duration)) {
+
+      if (
+        !video ||
+        !isReadyRef.current ||
+        !Number.isFinite(video.duration) ||
+        video.duration <= 0
+      ) {
         prevXRef.current = event.clientX;
         return;
       }
@@ -43,31 +54,40 @@ export function ScrubVideo() {
         return;
       }
 
-      const currentX = event.clientX;
-      const delta = currentX - prevXRef.current;
-      prevXRef.current = currentX;
+      const delta = event.clientX - prevXRef.current;
+      prevXRef.current = event.clientX;
 
       if (delta === 0) return;
 
-      const viewportWidth = window.innerWidth || 1;
       const timeOffset =
-        (delta / viewportWidth) * SENSITIVITY * video.duration;
-      const nextTime = Math.min(
+        (delta / Math.max(window.innerWidth, 1)) *
+        SENSITIVITY *
+        video.duration;
+
+      targetTimeRef.current = Math.min(
         Math.max(targetTimeRef.current + timeOffset, 0),
-        video.duration
+        video.duration - 0.01
       );
 
-      targetTimeRef.current = nextTime;
-
-      if (!isSeekingRef.current) {
+      if (!isSeekingRef.current && video.readyState >= 2) {
         isSeekingRef.current = true;
-        video.currentTime = nextTime;
+        video.currentTime = targetTimeRef.current;
       }
     };
 
-    window.addEventListener('mousemove', handleMouseMove, { passive: true });
+    const handleMouseLeave = () => {
+      prevXRef.current = null;
+    };
+
+    window.addEventListener('mousemove', handleMouseMove, {
+      passive: true,
+    });
+
+    window.addEventListener('mouseleave', handleMouseLeave);
+
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseleave', handleMouseLeave);
     };
   }, []);
 
@@ -78,7 +98,8 @@ export function ScrubVideo() {
       muted
       playsInline
       preload="auto"
-      onLoadedMetadata={handleLoadedMetadata}
+      onLoadedMetadata={handleReady}
+      onLoadedData={handleReady}
       onSeeked={handleSeeked}
       aria-hidden="true"
       className="fixed inset-0 z-0 w-full h-full object-cover pointer-events-none brightness-[1.04] translate-x-[8%] sm:translate-x-[0%] md:translate-x-[18%] lg:translate-x-[22%]"
