@@ -13,20 +13,41 @@ export function ScrubVideo() {
   const isReadyRef = useRef(false);
   const rafIdRef = useRef<number | null>(null);
 
-  const syncReadyState = useCallback(() => {
+  const syncReadyState = useCallback((source: string) => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video) {
+      console.log('[ScrubVideo] videoRef null on:', source);
+      return;
+    }
+
+    console.log('[ScrubVideo] event:', source, {
+      readyState: video.readyState,
+      networkState: video.networkState,
+      duration: video.duration,
+      currentTime: video.currentTime,
+    });
 
     if (
       Number.isFinite(video.duration) &&
       video.duration > 0 &&
-      video.readyState >= 2
+      video.readyState >= 2 &&
+      !isReadyRef.current
     ) {
-      if (!isReadyRef.current) {
-        isReadyRef.current = true;
-        targetTimeRef.current = video.currentTime || 0;
-      }
+      isReadyRef.current = true;
+      targetTimeRef.current = video.currentTime || 0;
+      console.log('[ScrubVideo] READY! targetTime:', targetTimeRef.current);
     }
+  }, []);
+
+  const handleError = useCallback(() => {
+    const video = videoRef.current;
+    console.error('[ScrubVideo] VIDEO ERROR:', {
+      errorCode: video?.error?.code,
+      errorMessage: video?.error?.message,
+      src: video?.currentSrc || VIDEO_URL,
+      networkState: video?.networkState,
+      readyState: video?.readyState,
+    });
   }, []);
 
   const handleSeeked = useCallback(() => {
@@ -51,8 +72,8 @@ export function ScrubVideo() {
   }, []);
 
   useEffect(() => {
-    // Antisipasi jika video sudah siap sebelum listener terpasang
-    syncReadyState();
+    console.log('[ScrubVideo] mounted');
+    syncReadyState('effect-mount');
 
     const stepScrub = () => {
       const video = videoRef.current;
@@ -92,7 +113,15 @@ export function ScrubVideo() {
       if (delta === 0) return;
 
       const video = videoRef.current;
-      if (!video || !Number.isFinite(video.duration) || video.duration <= 0) {
+      if (!video) return;
+
+      if (!isReadyRef.current || video.readyState < 2) {
+        console.log('[ScrubVideo] move while NOT ready:', {
+          isReady: isReadyRef.current,
+          readyState: video.readyState,
+          networkState: video.networkState,
+          duration: video.duration,
+        });
         return;
       }
 
@@ -115,6 +144,7 @@ export function ScrubVideo() {
     window.addEventListener('mouseleave', handleMouseLeave);
 
     return () => {
+      console.log('[ScrubVideo] unmounted');
       if (rafIdRef.current !== null) {
         window.cancelAnimationFrame(rafIdRef.current);
       }
@@ -130,11 +160,12 @@ export function ScrubVideo() {
       muted
       playsInline
       preload="auto"
-      onLoadedMetadata={syncReadyState}
-      onLoadedData={syncReadyState}
-      onCanPlay={syncReadyState}
-      onCanPlayThrough={syncReadyState}
+      onLoadedMetadata={() => syncReadyState('onLoadedMetadata')}
+      onLoadedData={() => syncReadyState('onLoadedData')}
+      onCanPlay={() => syncReadyState('onCanPlay')}
+      onCanPlayThrough={() => syncReadyState('onCanPlayThrough')}
       onSeeked={handleSeeked}
+      onError={handleError}
       aria-hidden="true"
       className="fixed inset-0 z-0 w-full h-full object-cover pointer-events-none brightness-[1.04] translate-x-[8%] sm:translate-x-[0%] md:translate-x-[18%] lg:translate-x-[22%]"
       style={{
