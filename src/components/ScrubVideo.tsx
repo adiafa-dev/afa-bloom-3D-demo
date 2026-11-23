@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const VIDEO_URL =
   '/assets/aistudio/kling_20261120_VIDEO_Tolong_bua_4205_0_f0492195.mp4';
@@ -16,9 +16,35 @@ export function ScrubVideo() {
   const isReadyRef = useRef(false);
   const isSeekingRef = useRef(false);
 
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+
+  // 1) Download full video -> blob URL
+  useEffect(() => {
+    const controller = new AbortController();
+    let objectUrl: string | null = null;
+
+    (async () => {
+      try {
+        const res = await fetch(VIDEO_URL, { signal: controller.signal });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        objectUrl = URL.createObjectURL(blob);
+        setBlobUrl(objectUrl);
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          console.error('[VIDEO] gagal download:', err);
+        }
+      }
+    })();
+
+    return () => {
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, []);
+
   const startSeek = useCallback(() => {
     const video = videoRef.current;
-
     if (
       !video ||
       !isReadyRef.current ||
@@ -33,7 +59,6 @@ export function ScrubVideo() {
       0,
       Math.min(targetTimeRef.current, video.duration - 0.05)
     );
-
     if (Math.abs(target - video.currentTime) < SEEK_THRESHOLD) return;
 
     isSeekingRef.current = true;
@@ -43,18 +68,20 @@ export function ScrubVideo() {
 
   const handleSeeked = useCallback(() => {
     isSeekingRef.current = false;
-
-    const difference = Math.abs(
-      targetTimeRef.current - requestedTimeRef.current
-    );
-
-    if (difference > SEEK_THRESHOLD) startSeek();
+    if (
+      Math.abs(targetTimeRef.current - requestedTimeRef.current) >
+      SEEK_THRESHOLD
+    ) {
+      startSeek();
+    }
   }, [startSeek]);
 
-  // ✅ Setup ready-state secara robust
+  // 2) Ready detection, jalan setelah blobUrl terpasang
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || !blobUrl) return;
+
+    isReadyRef.current = false;
 
     const markReady = () => {
       if (isReadyRef.current) return;
@@ -64,28 +91,20 @@ export function ScrubVideo() {
       targetTimeRef.current = video.currentTime || 0;
       requestedTimeRef.current = video.currentTime || 0;
 
-      // Prime decoder supaya frame pertama bisa di-seek
+      // prime decoder
       const p = video.play();
       if (p && typeof p.then === 'function') {
-        p.then(() => video.pause()).catch(() => {
-          /* autoplay diblokir, aman diabaikan karena muted */
-        });
+        p.then(() => video.pause()).catch(() => {});
       } else {
         video.pause();
       }
     };
 
-    // Kalau event sudah terlanjur lewat, cek langsung
     markReady();
-
-    // Pasang listener native (bukan cuma lewat props React)
     video.addEventListener('loadedmetadata', markReady);
     video.addEventListener('loadeddata', markReady);
     video.addEventListener('canplay', markReady);
-    video.addEventListener('canplaythrough', markReady);
-    video.addEventListener('durationchange', markReady);
 
-    // Safety net: polling singkat kalau semua event terlewat
     const interval = window.setInterval(() => {
       markReady();
       if (isReadyRef.current) window.clearInterval(interval);
@@ -96,10 +115,8 @@ export function ScrubVideo() {
       video.removeEventListener('loadedmetadata', markReady);
       video.removeEventListener('loadeddata', markReady);
       video.removeEventListener('canplay', markReady);
-      video.removeEventListener('canplaythrough', markReady);
-      video.removeEventListener('durationchange', markReady);
     };
-  }, []);
+  }, [blobUrl]);
 
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
@@ -136,23 +153,23 @@ export function ScrubVideo() {
       startSeek();
     };
 
-    const handleMouseLeave = () => {
+    const handleLeave = () => {
       prevXRef.current = null;
     };
 
     window.addEventListener('mousemove', handleMouseMove, { passive: true });
-    document.addEventListener('mouseleave', handleMouseLeave);
+    document.addEventListener('mouseleave', handleLeave);
 
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseleave', handleMouseLeave);
+      document.removeEventListener('mouseleave', handleLeave);
     };
   }, [startSeek]);
 
   return (
     <video
       ref={videoRef}
-      src={VIDEO_URL}
+      src={blobUrl ?? undefined}
       muted
       playsInline
       preload="auto"
